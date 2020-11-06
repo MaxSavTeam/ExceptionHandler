@@ -3,4 +3,5 @@
     <string name="exception_message">Some exception occurred</string>
     <string name="show_stacktrace">Show stacktrace</string>
     <string name="make_exception">Make exception</string>
+    <string name="stacktrace_file_not_created">Stacktrace file not created</string>
 </resources>

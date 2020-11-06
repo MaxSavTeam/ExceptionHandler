@@ -20,7 +20,7 @@ import java.util.Date;
 import java.util.Locale;
 
 public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
-	public enum CALL_TAGS{
+	public enum CALL_TAGS {
 		CALLED_MANUALLY,
 		CALLED_FROM_ALERT_DIALOG_TO_SEND_LOG,
 		CALLED_FROM_EXCEPTION_HANDLER
@@ -29,20 +29,44 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 	private final Context mApplicationContext;
 	private final Activity mActivity;
 	private final Class<?> mAfterExceptionActivity;
+	private Thread.UncaughtExceptionHandler mDefaultHandler;
 
-	public ExceptionHandler(Activity callerActivity, @Nullable Class<?> afterExceptionActivity){
+	/**
+	 * @param callerActivity         The activity from which activity for showing error will be launched
+	 *                               and from which will be got application id
+	 * @param afterExceptionActivity The activity to be launched when error occurred.
+	 *                               In intent will be passed path to the stacktrace file ("path" extra). Pass {@code null}
+	 *                               if you do not want to launch some activity.
+	 * @param useDefaultHandler      After creating report file default exception handler will be used
+	 */
+	public ExceptionHandler(Activity callerActivity, @Nullable Class<?> afterExceptionActivity, boolean useDefaultHandler) {
 		mActivity = callerActivity;
 		mApplicationContext = callerActivity.getApplicationContext();
 		mAfterExceptionActivity = afterExceptionActivity;
+		if ( useDefaultHandler ) {
+			mDefaultHandler = Thread.getDefaultUncaughtExceptionHandler();
+		}
+	}
+
+	/**
+	 * @param callerActivity         The activity from which activity for showing error will be launched
+	 *                               and from which will be got application id
+	 * @param afterExceptionActivity The activity to be launched when error occurred.
+	 *                               In intent will be passed path to the stacktrace file ("path" extra)
+	 *                               or {@code null} if some errors were during creating stacktrace file
+	 *                               Pass {@code null} if you do not want to launch some activity.
+	 */
+	public ExceptionHandler(Activity callerActivity, @Nullable Class<?> afterExceptionActivity) {
+		this( callerActivity, afterExceptionActivity, false );
 	}
 
 	@Override
 	public void uncaughtException(@NonNull Thread t, @NonNull Throwable e) {
-		File stacktraceFile = prepareStacktrace( t, e, CALL_TAGS.CALLED_FROM_EXCEPTION_HANDLER );
+		File stacktraceFile = prepareStacktrace( mActivity.getApplicationContext(), t, e, CALL_TAGS.CALLED_FROM_EXCEPTION_HANDLER );
 
-		if(mAfterExceptionActivity != null) {
+		if ( mAfterExceptionActivity != null ) {
 			Intent intent = new Intent( mActivity, mAfterExceptionActivity );
-			intent.putExtra( "crash", true ).putExtra( "path", stacktraceFile.getPath() );
+			intent.putExtra( "path", stacktraceFile == null ? null : stacktraceFile.getPath() );
 			intent.addFlags( Intent.FLAG_ACTIVITY_CLEAR_TOP
 					| Intent.FLAG_ACTIVITY_CLEAR_TASK
 					| Intent.FLAG_ACTIVITY_NEW_TASK );
@@ -52,40 +76,45 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 			mgr.set( AlarmManager.RTC, System.currentTimeMillis() + 100, pendingIntent );
 		}
 		mActivity.finish();
+		mDefaultHandler.uncaughtException( t, e );
 		System.exit( 1 );
 	}
 
-	public static void justWriteException(Thread t, Throwable tr){
-		new ExceptionHandler( null, null ).prepareStacktrace( t, tr, CALL_TAGS.CALLED_MANUALLY );
+	public static void justWriteException(Context context, Thread t, Throwable tr) {
+		prepareStacktrace( context.getApplicationContext(), t, tr, CALL_TAGS.CALLED_MANUALLY );
 	}
 
-	private File prepareStacktrace(Thread t, Throwable e, CALL_TAGS type) {
+	private static File prepareStacktrace(Context applicationContext, Thread t, Throwable e, CALL_TAGS type) {
 		e.printStackTrace();
 		PackageInfo mPackageInfo = null;
 		try {
-			mPackageInfo = mApplicationContext.getPackageManager().getPackageInfo( mApplicationContext.getPackageName(), 0 );
+			mPackageInfo = applicationContext.getPackageManager().getPackageInfo( applicationContext.getPackageName(), 0 );
 		} catch (PackageManager.NameNotFoundException ex) {
 			ex.printStackTrace();
 		}
 
-		File file = new File( mApplicationContext.getExternalFilesDir( null ) + "/stacktraces/" );
+		File file = new File( applicationContext.getExternalFilesDir( null ) + "/stacktraces/" );
 		if ( !file.exists() ) {
-			file.mkdir();
+			if(!file.mkdir())
+				return null;
 		}
 		Date date = new Date( System.currentTimeMillis() );
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat( "dd.MM.yyyy HH:mm:ss", Locale.ROOT );
 		SimpleDateFormat fileFormatter = new SimpleDateFormat( "dd-MM-yyyy_HH:mm:ss", Locale.ROOT );
 		String formattedDate = fileFormatter.format( date );
 		String suffix = "";
-		if(type == CALL_TAGS.CALLED_MANUALLY)
+		if ( type == CALL_TAGS.CALLED_MANUALLY ) {
 			suffix = "-m";
-		else if(type == CALL_TAGS.CALLED_FROM_ALERT_DIALOG_TO_SEND_LOG)
+		} else if ( type == CALL_TAGS.CALLED_FROM_ALERT_DIALOG_TO_SEND_LOG ) {
 			suffix = "-m-ad-sl";
+		}
 		file = new File( file.getPath() + "/stacktrace-" + formattedDate + suffix + ".txt" );
 
 		try {
-			file.createNewFile();
+			if(!file.createNewFile())
+				return null;
 		} catch (IOException ignored) {
+			return null;
 		}
 		StringBuilder report = new StringBuilder();
 		report.append( type.toString() ).append( "\n" );
@@ -93,13 +122,13 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 				.append( "Thread name: " ).append( t.getName() ).append( "\n" )
 				.append( "Thread id: " ).append( t.getId() ).append( "\n" )
 				.append( "Thread state: " ).append( t.getState() ).append( "\n" )
-				.append( "Package: " ).append( mApplicationContext.getPackageName() ).append( "\n" )
+				.append( "Package: " ).append( applicationContext.getPackageName() ).append( "\n" )
 				.append( "Manufacturer: " ).append( Build.MANUFACTURER ).append( "\n" )
 				.append( "Model: " ).append( Build.MODEL ).append( "\n" )
 				.append( "Brand: " ).append( Build.BRAND ).append( "\n" )
 				.append( "Android Version: " ).append( Build.VERSION.RELEASE ).append( "\n" )
 				.append( "Android SDK: " ).append( Build.VERSION.SDK_INT ).append( "\n" );
-		if(mPackageInfo != null) {
+		if ( mPackageInfo != null ) {
 			report.append( "Version name: " ).append( mPackageInfo.versionName ).append( "\n" )
 					.append( "Version code: " ).append( mPackageInfo.versionCode ).append( "\n" );
 		}
@@ -123,7 +152,7 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		return file;
 	}
 
-	private void printStackTrace(Throwable t, StringBuilder builder) {
+	private static void printStackTrace(Throwable t, StringBuilder builder) {
 		if ( t == null ) {
 			return;
 		}
