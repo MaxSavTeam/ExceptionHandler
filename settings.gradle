@@ -1,0 +1,3 @@
+rootProject.name = "Exception Handler Example"
+include ':app'
+include ':ExceptionHandler'
