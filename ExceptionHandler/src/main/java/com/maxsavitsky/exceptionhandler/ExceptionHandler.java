@@ -84,11 +84,25 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		System.exit( 1 );
 	}
 
+	/**
+	 * Writes exception to stacktrace file like after uncaught exception.
+	 * Stacktrace file will be created with suffix -m
+	 * */
 	public static void justWriteException(Context context, Thread t, Throwable tr) {
 		prepareStacktrace( context.getApplicationContext(), t, tr, CALL_TAGS.CALLED_MANUALLY );
 	}
 
+	/**
+	 * Writes exception to stacktrace file like after uncaught exception.
+	 * Stacktrace file will be created with suffix -m
+	 *
+	 * This method uses application context which has been set in constructor or with setApplicationContext method
+	 *
+	 * @throws IllegalArgumentException If no default application context set or context is null.
+	 * */
 	public static void justWriteException(Thread t, Throwable tr){
+		if(sApplicationContext == null)
+			throw new IllegalArgumentException( "No default application context set. Please call setApplicationContext or use it after constructor" );
 		prepareStacktrace( sApplicationContext, t, tr, CALL_TAGS.CALLED_MANUALLY );
 	}
 
