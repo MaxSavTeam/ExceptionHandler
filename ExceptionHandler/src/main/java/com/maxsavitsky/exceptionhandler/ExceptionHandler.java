@@ -26,7 +26,7 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		CALLED_FROM_EXCEPTION_HANDLER
 	}
 
-	private final Context mApplicationContext;
+	private static Context sApplicationContext;
 	private final Activity mActivity;
 	private final Class<?> mAfterExceptionActivity;
 	private Thread.UncaughtExceptionHandler mDefaultHandler;
@@ -41,7 +41,7 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 	 */
 	public ExceptionHandler(Activity callerActivity, @Nullable Class<?> afterExceptionActivity, boolean useDefaultHandler) {
 		mActivity = callerActivity;
-		mApplicationContext = callerActivity.getApplicationContext();
+		sApplicationContext = callerActivity.getApplicationContext();
 		mAfterExceptionActivity = afterExceptionActivity;
 		if ( useDefaultHandler ) {
 			mDefaultHandler = Thread.getDefaultUncaughtExceptionHandler();
@@ -60,6 +60,10 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		this( callerActivity, afterExceptionActivity, false );
 	}
 
+	public static void setApplicationContext(Context applicationContext) {
+		ExceptionHandler.sApplicationContext = applicationContext;
+	}
+
 	@Override
 	public void uncaughtException(@NonNull Thread t, @NonNull Throwable e) {
 		File stacktraceFile = prepareStacktrace( mActivity.getApplicationContext(), t, e, CALL_TAGS.CALLED_FROM_EXCEPTION_HANDLER );
@@ -71,8 +75,8 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 					| Intent.FLAG_ACTIVITY_CLEAR_TASK
 					| Intent.FLAG_ACTIVITY_NEW_TASK );
 
-			PendingIntent pendingIntent = PendingIntent.getActivity( mApplicationContext, 0, intent, PendingIntent.FLAG_ONE_SHOT );
-			AlarmManager mgr = (AlarmManager) mApplicationContext.getSystemService( Context.ALARM_SERVICE );
+			PendingIntent pendingIntent = PendingIntent.getActivity( sApplicationContext, 0, intent, PendingIntent.FLAG_ONE_SHOT );
+			AlarmManager mgr = (AlarmManager) sApplicationContext.getSystemService( Context.ALARM_SERVICE );
 			mgr.set( AlarmManager.RTC, System.currentTimeMillis() + 100, pendingIntent );
 		}
 		mActivity.finish();
@@ -82,6 +86,10 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 
 	public static void justWriteException(Context context, Thread t, Throwable tr) {
 		prepareStacktrace( context.getApplicationContext(), t, tr, CALL_TAGS.CALLED_MANUALLY );
+	}
+
+	public static void justWriteException(Thread t, Throwable tr){
+		prepareStacktrace( sApplicationContext, t, tr, CALL_TAGS.CALLED_MANUALLY );
 	}
 
 	private static File prepareStacktrace(Context applicationContext, Thread t, Throwable e, CALL_TAGS type) {
