@@ -20,9 +20,9 @@ import java.util.Date;
 import java.util.Locale;
 
 public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
-	public enum CALL_TAGS {
+	public enum CallTag {
 		CALLED_MANUALLY,
-		CALLED_FROM_ALERT_DIALOG_TO_SEND_LOG,
+		CALLED_TO_SEND_LOG,
 		CALLED_FROM_EXCEPTION_HANDLER
 	}
 
@@ -66,7 +66,7 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 
 	@Override
 	public void uncaughtException(@NonNull Thread t, @NonNull Throwable e) {
-		File stacktraceFile = prepareStacktrace( mActivity.getApplicationContext(), t, e, CALL_TAGS.CALLED_FROM_EXCEPTION_HANDLER );
+		File stacktraceFile = prepareStacktrace( mActivity.getApplicationContext(), t, e, CallTag.CALLED_FROM_EXCEPTION_HANDLER );
 
 		if ( mAfterExceptionActivity != null ) {
 			Intent intent = new Intent( mActivity, mAfterExceptionActivity );
@@ -89,7 +89,7 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 	 * Stacktrace file will be created with suffix -m
 	 * */
 	public static void justWriteException(Context context, Thread t, Throwable tr) {
-		prepareStacktrace( context.getApplicationContext(), t, tr, CALL_TAGS.CALLED_MANUALLY );
+		prepareStacktrace( context.getApplicationContext(), t, tr, CallTag.CALLED_MANUALLY );
 	}
 
 	/**
@@ -103,10 +103,32 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 	public static void justWriteException(Thread t, Throwable tr){
 		if(sApplicationContext == null)
 			throw new IllegalArgumentException( "No default application context set. Please call setApplicationContext or use it after constructor" );
-		prepareStacktrace( sApplicationContext, t, tr, CALL_TAGS.CALLED_MANUALLY );
+		prepareStacktrace( sApplicationContext, t, tr, CallTag.CALLED_MANUALLY );
 	}
 
-	private static File prepareStacktrace(Context applicationContext, Thread t, Throwable e, CALL_TAGS type) {
+	/**
+	 * Writes exception to stacktrace file like after uncaught exception.
+	 * Stacktrace file will be created with suffix -m-sl
+	 *
+	 * This method uses application context which has been set in constructor or with setApplicationContext method
+	 *
+	 * @throws IllegalArgumentException If no default application context set or context is null.
+	 * */
+	public static File prepareLogToSend(Thread t, Throwable tr){
+		if(sApplicationContext == null)
+			throw new IllegalArgumentException( "No default application context set. Please call setApplicationContext or use it after constructor" );
+		return prepareStacktrace( sApplicationContext, t, tr, CallTag.CALLED_TO_SEND_LOG );
+	}
+
+	/**
+	 * Writes exception to stacktrace file like after uncaught exception.
+	 * Stacktrace file will be created with suffix -m-sl
+	 * */
+	public static File prepareLogToSend(Context applicationContext, Thread t, Throwable tr){
+		return prepareStacktrace( applicationContext.getApplicationContext(), t, tr, CallTag.CALLED_TO_SEND_LOG );
+	}
+
+	private static File prepareStacktrace(Context applicationContext, Thread t, Throwable e, CallTag type) {
 		e.printStackTrace();
 		PackageInfo mPackageInfo = null;
 		try {
@@ -125,10 +147,10 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		SimpleDateFormat fileFormatter = new SimpleDateFormat( "dd-MM-yyyy_HH:mm:ss", Locale.ROOT );
 		String formattedDate = fileFormatter.format( date );
 		String suffix = "";
-		if ( type == CALL_TAGS.CALLED_MANUALLY ) {
+		if ( type == CallTag.CALLED_MANUALLY ) {
 			suffix = "-m";
-		} else if ( type == CALL_TAGS.CALLED_FROM_ALERT_DIALOG_TO_SEND_LOG ) {
-			suffix = "-m-ad-sl";
+		} else if ( type == CallTag.CALLED_TO_SEND_LOG ) {
+			suffix = "-m-sl";
 		}
 		file = new File( file.getPath() + "/stacktrace-" + formattedDate + suffix + ".txt" );
 
