@@ -14,7 +14,7 @@ allprojects {
 **Step 2**. Add library dependency to your app-level build.gradle
 ```
 dependencies {
-    implementation 'com.github.MaxSavTeam:ExceptionHandler-Library:0.2.1'
+    implementation 'com.github.MaxSavTeam:ExceptionHandler-Library:0.3.1'
 }
 ```
 **Step 3**. Add to code
