@@ -1,6 +1,5 @@
 package com.maxsavitsky.exceptionhandler;
 
-import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -26,68 +25,71 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		CALLED_FROM_EXCEPTION_HANDLER
 	}
 
-	private static Context sApplicationContext;
-	private final Activity mActivity;
+	private Context mApplicationContext;
 	private final Class<?> mAfterExceptionActivity;
 	private Thread.UncaughtExceptionHandler mDefaultHandler;
 
+	private static Context sApplicationContext;
+
 	/**
-	 * @param callerActivity         The activity from which activity for showing error will be launched
-	 *                               and from which will be got application id
+	 * @param applicationContext     Should not be null because handler should get app info (version name, code, etc.) and start after exception activity
 	 * @param afterExceptionActivity The activity to be launched when error occurred.
 	 *                               In intent will be passed path to the stacktrace file ("path" extra). Pass {@code null}
 	 *                               if you do not want to launch some activity.
-	 * @param useDefaultHandler      After creating report file default exception handler will be used
+	 * @param useDefaultHandler      After creating report file default exception handler will be used.<br>
+	 *                               If afterExceptionActivity not null then this parameter will be ignored
 	 */
-	public ExceptionHandler(Activity callerActivity, @Nullable Class<?> afterExceptionActivity, boolean useDefaultHandler) {
-		mActivity = callerActivity;
-		sApplicationContext = callerActivity.getApplicationContext();
+	public ExceptionHandler(@NonNull Context applicationContext, @Nullable Class<?> afterExceptionActivity, boolean useDefaultHandler) {
+		mApplicationContext = applicationContext.getApplicationContext();
+		sApplicationContext = mApplicationContext;
 		mAfterExceptionActivity = afterExceptionActivity;
-		if ( useDefaultHandler ) {
+		if ( afterExceptionActivity == null && useDefaultHandler ) {
 			mDefaultHandler = Thread.getDefaultUncaughtExceptionHandler();
 		}
 	}
 
 	/**
-	 * @param callerActivity         The activity from which activity for showing error will be launched
-	 *                               and from which will be got application id
+	 * @param applicationContext     Should not be null because handler should get app info (version name, code, etc.) and start after exception activity
 	 * @param afterExceptionActivity The activity to be launched when error occurred.
 	 *                               In intent will be passed path to the stacktrace file ("path" extra)
 	 *                               or {@code null} if some errors were during creating stacktrace file
 	 *                               Pass {@code null} if you do not want to launch some activity.
 	 */
-	public ExceptionHandler(Activity callerActivity, @Nullable Class<?> afterExceptionActivity) {
-		this( callerActivity, afterExceptionActivity, false );
+	public ExceptionHandler(@NonNull Context applicationContext, @Nullable Class<?> afterExceptionActivity) {
+		this( applicationContext, afterExceptionActivity, false );
 	}
 
+	/**
+	 * Sets static application context to work with static methods such as {@link #justWriteException(Thread, Throwable)}, {@link #prepareLogToSend(Thread, Throwable)}
+	 */
 	public static void setApplicationContext(Context applicationContext) {
-		ExceptionHandler.sApplicationContext = applicationContext;
+		ExceptionHandler.sApplicationContext = applicationContext.getApplicationContext();
 	}
 
 	@Override
 	public void uncaughtException(@NonNull Thread t, @NonNull Throwable e) {
-		File stacktraceFile = prepareStacktrace( mActivity.getApplicationContext(), t, e, CallTag.CALLED_FROM_EXCEPTION_HANDLER );
+		File stacktraceFile = prepareStacktrace( mApplicationContext, t, e, CallTag.CALLED_FROM_EXCEPTION_HANDLER );
 
 		if ( mAfterExceptionActivity != null ) {
-			Intent intent = new Intent( mActivity, mAfterExceptionActivity );
+			Intent intent = new Intent( mApplicationContext, mAfterExceptionActivity );
 			intent.putExtra( "path", stacktraceFile == null ? null : stacktraceFile.getPath() );
 			intent.addFlags( Intent.FLAG_ACTIVITY_CLEAR_TOP
 					| Intent.FLAG_ACTIVITY_CLEAR_TASK
 					| Intent.FLAG_ACTIVITY_NEW_TASK );
 
-			PendingIntent pendingIntent = PendingIntent.getActivity( sApplicationContext, 0, intent, PendingIntent.FLAG_ONE_SHOT );
-			AlarmManager mgr = (AlarmManager) sApplicationContext.getSystemService( Context.ALARM_SERVICE );
+			PendingIntent pendingIntent = PendingIntent.getActivity( mApplicationContext, 0, intent, PendingIntent.FLAG_ONE_SHOT );
+			AlarmManager mgr = (AlarmManager) mApplicationContext.getSystemService( Context.ALARM_SERVICE );
 			mgr.set( AlarmManager.RTC, System.currentTimeMillis() + 100, pendingIntent );
 		}
-		mActivity.finish();
-		mDefaultHandler.uncaughtException( t, e );
-		System.exit( 1 );
+		if ( mDefaultHandler != null ) {
+			mDefaultHandler.uncaughtException( t, e );
+		}
 	}
 
 	/**
 	 * Writes exception to stacktrace file like after uncaught exception.
 	 * Stacktrace file will be created with suffix -m
-	 * */
+	 */
 	public static void justWriteException(Context context, Thread t, Throwable tr) {
 		prepareStacktrace( context.getApplicationContext(), t, tr, CallTag.CALLED_MANUALLY );
 	}
@@ -95,37 +97,48 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 	/**
 	 * Writes exception to stacktrace file like after uncaught exception.
 	 * Stacktrace file will be created with suffix -m
-	 *
+	 * <p>
 	 * This method uses application context which has been set in constructor or with setApplicationContext method
 	 *
 	 * @throws IllegalArgumentException If no default application context set or context is null.
-	 * */
-	public static void justWriteException(Thread t, Throwable tr){
-		if(sApplicationContext == null)
+	 */
+	public static void justWriteException(Thread t, Throwable tr) {
+		if ( sApplicationContext == null ) {
 			throw new IllegalArgumentException( "No default application context set. Please call setApplicationContext or use it after constructor" );
+		}
 		prepareStacktrace( sApplicationContext, t, tr, CallTag.CALLED_MANUALLY );
 	}
 
 	/**
 	 * Writes exception to stacktrace file like after uncaught exception.
 	 * Stacktrace file will be created with suffix -m-sl
-	 *
+	 * <p>
 	 * This method uses application context which has been set in constructor or with setApplicationContext method
 	 *
 	 * @throws IllegalArgumentException If no default application context set or context is null.
-	 * */
-	public static File prepareLogToSend(Thread t, Throwable tr){
-		if(sApplicationContext == null)
+	 */
+	public static File prepareLogToSend(Thread t, Throwable tr) {
+		if ( sApplicationContext == null ) {
 			throw new IllegalArgumentException( "No default application context set. Please call setApplicationContext or use it after constructor" );
+		}
 		return prepareStacktrace( sApplicationContext, t, tr, CallTag.CALLED_TO_SEND_LOG );
 	}
 
 	/**
 	 * Writes exception to stacktrace file like after uncaught exception.
 	 * Stacktrace file will be created with suffix -m-sl
-	 * */
-	public static File prepareLogToSend(Context applicationContext, Thread t, Throwable tr){
+	 */
+	public static File prepareLogToSend(Context applicationContext, Thread t, Throwable tr) {
 		return prepareStacktrace( applicationContext.getApplicationContext(), t, tr, CallTag.CALLED_TO_SEND_LOG );
+	}
+
+	/**
+	 * Clears all resources that were used (context, etc.).<br>
+	 * If method called, handler will no longer receive uncaught exceptions and default handler should be recreated
+	 */
+	public void destroy() {
+		mApplicationContext = null;
+		mDefaultHandler = null;
 	}
 
 	private static File prepareStacktrace(Context applicationContext, Thread t, Throwable e, CallTag type) {
@@ -139,8 +152,9 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 
 		File file = new File( applicationContext.getExternalFilesDir( null ) + "/stacktraces/" );
 		if ( !file.exists() ) {
-			if(!file.mkdir())
+			if ( !file.mkdir() ) {
 				return null;
+			}
 		}
 		Date date = new Date( System.currentTimeMillis() );
 		SimpleDateFormat simpleDateFormat = new SimpleDateFormat( "dd.MM.yyyy HH:mm:ss", Locale.ROOT );
@@ -155,8 +169,9 @@ public class ExceptionHandler implements Thread.UncaughtExceptionHandler {
 		file = new File( file.getPath() + "/stacktrace-" + formattedDate + suffix + ".txt" );
 
 		try {
-			if(!file.createNewFile())
+			if ( !file.createNewFile() ) {
 				return null;
+			}
 		} catch (IOException ignored) {
 			return null;
 		}
