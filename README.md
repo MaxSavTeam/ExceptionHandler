@@ -14,14 +14,14 @@ allprojects {
 **Step 2**. Add library dependency to your app-level build.gradle
 ```
 dependencies {
-    implementation 'com.github.MaxSavTeam:ExceptionHandler-Library:0.3.1'
+    implementation 'com.github.MaxSavTeam:ExceptionHandler-Library:1.0'
 }
 ```
 **Step 3**. Add to code
 ```
-Thread.setDefaultUncaughtExceptionHandler(new ExceptionHandler(Activity callerActivity, Class<?> afterExceptionActivityClass, boolean useDefaultHandler));
+Thread.setDefaultUncaughtExceptionHandler(new ExceptionHandler(Context applicationContext, Class<?> afterExceptionActivityClass, boolean useDefaultHandler));
 ```
 Where  
-``callerActivity`` is activity from which activity for showing error will be launched and from which will be got application id and application context.  
+``applicationContext`` is application context from which will be got app info and launched after exception activity. Should not be null  
 ``afterExceptionActivity`` is activity to be launched when error occurred. In intent will be passed path to the stacktrace file ("path" extra). Pass `null` if you do not want to launch some activity.  
 ``useDefaultHandler`` indicates that after creating stacktrace file will be called ``Thread.getDefaultUncaughtExceptionHandler().uncaughtException(Thread, Exception)``
